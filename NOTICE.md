@@ -1,6 +1,6 @@
 # Notice
 
-Codex LED Widget Native is a native WPF rewrite inspired by:
+Codex LED Widget Native is a native desktop rewrite inspired by:
 
 - https://github.com/xicunwus2025-sys/codex-led-widget
 

@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexLedWidget.Wpf", "CodexLedWidget.Wpf\CodexLedWidget.Wpf.csproj", "{BF451396-0320-4E8D-9E07-7C084F746B1E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexLedWidget.Mac", "CodexLedWidget.Mac\CodexLedWidget.Mac.csproj", "{694AC835-706A-4B22-BE5B-CC884BD65A5F}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexLedWidget.Core", "CodexLedWidget.Core\CodexLedWidget.Core.csproj", "{65CFDC59-39DD-4209-971D-5AD5B78848F3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexLedWidget.Tests", "CodexLedWidget.Tests\CodexLedWidget.Tests.csproj", "{537A5193-90ED-4EFA-AC11-52DC74F71DD8}"
@@ -31,6 +33,18 @@ Global
 		{BF451396-0320-4E8D-9E07-7C084F746B1E}.Release|x64.Build.0 = Release|Any CPU
 		{BF451396-0320-4E8D-9E07-7C084F746B1E}.Release|x86.ActiveCfg = Release|Any CPU
 		{BF451396-0320-4E8D-9E07-7C084F746B1E}.Release|x86.Build.0 = Release|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Debug|x64.Build.0 = Debug|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Debug|x86.Build.0 = Debug|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Release|x64.ActiveCfg = Release|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Release|x64.Build.0 = Release|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Release|x86.ActiveCfg = Release|Any CPU
+		{694AC835-706A-4B22-BE5B-CC884BD65A5F}.Release|x86.Build.0 = Release|Any CPU
 		{65CFDC59-39DD-4209-971D-5AD5B78848F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{65CFDC59-39DD-4209-971D-5AD5B78848F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{65CFDC59-39DD-4209-971D-5AD5B78848F3}.Debug|x64.ActiveCfg = Debug|Any CPU

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
@@ -178,6 +179,19 @@ public static class CodexCommandResolver
         if (!string.IsNullOrWhiteSpace(localAppData))
         {
             candidates.Add(Path.Combine(localAppData, "OpenAI", "Codex", "bin", "codex.exe"));
+        }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            string? home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrWhiteSpace(home))
+            {
+                candidates.Add(Path.Combine(home, ".local", "bin", "codex"));
+                candidates.Add(Path.Combine(home, ".codex", "packages", "standalone", "current", "bin", "codex"));
+            }
+
+            candidates.Add("/opt/homebrew/bin/codex");
+            candidates.Add("/usr/local/bin/codex");
         }
 
         candidates.AddRange(FindOnPath());
