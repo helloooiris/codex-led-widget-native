@@ -363,7 +363,7 @@ public sealed class MainWindow : Window
     {
         InitializePanelSignalCheckpoint();
         StartOrbHelper();
-        Hide();
+        Close();
     }
 
     private void HideToMenuBar()
