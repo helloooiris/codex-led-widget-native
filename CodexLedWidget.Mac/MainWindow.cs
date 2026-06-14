@@ -18,6 +18,7 @@ public sealed class MainWindow : Window
 {
     private readonly CodexQuotaClient quotaClient = new();
     private readonly DispatcherTimer refreshTimer;
+    private readonly DispatcherTimer panelSignalTimer;
     private readonly ContentControl panelView = new();
     private readonly ContentControl floatingOrbView = new();
     private readonly QuotaOrbControl panelQuotaOrb = new();
@@ -46,6 +47,7 @@ public sealed class MainWindow : Window
     private Point? floatingMouseDownPoint;
     private PixelPoint floatingWindowOrigin;
     private bool floatingWasDragged;
+    private DateTime lastPanelSignalWriteUtc = DateTime.MinValue;
 
     public MainWindow()
     {
@@ -65,17 +67,22 @@ public sealed class MainWindow : Window
 
         refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
         refreshTimer.Tick += async (_, _) => await RefreshQuotaAsync();
+        panelSignalTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        panelSignalTimer.Tick += (_, _) => CheckPanelSignal();
 
         Opened += async (_, _) =>
         {
             PlaceWindowTopRight();
             CreateTrayIcon();
+            InitializePanelSignalCheckpoint();
             refreshTimer.Start();
+            panelSignalTimer.Start();
             await RefreshQuotaAsync();
         };
         Closed += (_, _) =>
         {
             refreshTimer.Stop();
+            panelSignalTimer.Stop();
             orbWindow?.Close();
             trayIcon?.Dispose();
         };
@@ -354,6 +361,7 @@ public sealed class MainWindow : Window
 
     private void CollapseToFloatingOrb()
     {
+        InitializePanelSignalCheckpoint();
         StartOrbHelper();
         Hide();
     }
@@ -420,6 +428,10 @@ public sealed class MainWindow : Window
     {
         if (viewMode == WidgetViewMode.Panel)
         {
+            Show();
+            Activate();
+            TerminateOrbHelpers();
+            UpdateTrayMenu();
             return;
         }
 
@@ -433,7 +445,45 @@ public sealed class MainWindow : Window
         Height = expandedSize.Height > 0 ? expandedSize.Height : layout.Height;
         Show();
         Activate();
+        TerminateOrbHelpers();
         UpdateTrayMenu();
+    }
+
+    private void InitializePanelSignalCheckpoint()
+    {
+        string path = PanelSignalPath();
+        lastPanelSignalWriteUtc = File.Exists(path)
+            ? File.GetLastWriteTimeUtc(path)
+            : DateTime.MinValue;
+    }
+
+    private void CheckPanelSignal()
+    {
+        string path = PanelSignalPath();
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        DateTime writeUtc = File.GetLastWriteTimeUtc(path);
+        if (writeUtc <= lastPanelSignalWriteUtc)
+        {
+            return;
+        }
+
+        lastPanelSignalWriteUtc = writeUtc;
+        ExpandPanel();
+    }
+
+    private static string PanelSignalPath()
+    {
+        string appSupport = OperatingSystem.IsMacOS()
+            ? System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Library",
+                "Application Support")
+            : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return System.IO.Path.Combine(appSupport, "Codex LED Widget", "show-panel.signal");
     }
 
     private void CreateTrayIcon()

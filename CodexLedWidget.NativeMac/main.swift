@@ -409,7 +409,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        terminateWidgetPanelIfRunning()
+        if isWidgetPanelRunning(), signalWidgetPanel() {
+            panel.orderOut(nil)
+            NSApp.terminate(nil)
+            return
+        }
+
         startWidgetPanel(from: app) { [weak self] in
             self?.panel.orderOut(nil)
             NSApp.terminate(nil)
@@ -440,12 +445,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return FileManager.default.fileExists(atPath: fallback.path) ? fallback : nil
     }
 
-    private func terminateWidgetPanelIfRunning() {
+    private func isWidgetPanelRunning() -> Bool {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
         process.arguments = ["-f", "CodexLedWidget.Mac"]
-        try? process.run()
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        guard (try? process.run()) != nil else {
+            return false
+        }
+
         process.waitUntilExit()
+        return process.terminationStatus == 0
+    }
+
+    private func signalWidgetPanel() -> Bool {
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return false
+        }
+
+        let directory = appSupport.appendingPathComponent("Codex LED Widget", isDirectory: true)
+        let signal = directory.appendingPathComponent("show-panel.signal")
+
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try "\(Date().timeIntervalSince1970)\n".write(to: signal, atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            return false
+        }
     }
 
     private func refresh() {
