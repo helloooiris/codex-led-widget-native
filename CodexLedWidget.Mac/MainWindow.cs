@@ -389,11 +389,31 @@ public sealed class MainWindow : Window
             return;
         }
 
+        TerminateOrbHelpers();
         Process.Start(new ProcessStartInfo
         {
             FileName = helperPath,
             UseShellExecute = false
         });
+    }
+
+    private static void TerminateOrbHelpers()
+    {
+        try
+        {
+            ProcessStartInfo startInfo = new()
+            {
+                FileName = "/usr/bin/pkill",
+                UseShellExecute = false
+            };
+            startInfo.ArgumentList.Add("-f");
+            startInfo.ArgumentList.Add("CodexLedOrb");
+            using Process? process = Process.Start(startInfo);
+            process?.WaitForExit(800);
+        }
+        catch
+        {
+        }
     }
 
     private void ExpandPanel()

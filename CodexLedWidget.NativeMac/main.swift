@@ -410,25 +410,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         terminateWidgetPanelIfRunning()
-        startWidgetPanel(from: app)
-        panel.orderOut(nil)
+        startWidgetPanel(from: app) { [weak self] in
+            self?.panel.orderOut(nil)
+            NSApp.terminate(nil)
+        }
     }
 
-    private func startWidgetPanel(from app: URL) {
-        let executable = app
-            .appendingPathComponent("Contents")
-            .appendingPathComponent("MacOS")
-            .appendingPathComponent("CodexLedWidget.Mac")
-
-        if FileManager.default.isExecutableFile(atPath: executable.path) {
-            let process = Process()
-            process.executableURL = executable
-            process.currentDirectoryURL = executable.deletingLastPathComponent()
-            try? process.run()
-            return
+    private func startWidgetPanel(from app: URL, completion: @escaping () -> Void) {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: app, configuration: configuration) { _, _ in
+            DispatchQueue.main.async {
+                completion()
+            }
         }
-
-        NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
     }
 
     private func containingWidgetAppURL() -> URL? {
