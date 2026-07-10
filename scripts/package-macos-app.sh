@@ -15,12 +15,14 @@ ICON_ICNS="$ROOT_DIR/publish/AppIcon.icns"
 
 python3 "$ROOT_DIR/scripts/create-macos-icon.py" >/dev/null
 
+rm -rf "$PUBLISH_DIR"
 dotnet publish "$PROJECT" \
   -c Release \
   -r osx-arm64 \
   --self-contained true \
   -p:PublishSingleFile=false \
-  -p:PublishReadyToRun=true \
+  -p:PublishTrimmed=true \
+  -p:TrimMode=partial \
   -p:DebugType=None \
   -p:DebugSymbols=false \
   -o "$PUBLISH_DIR"

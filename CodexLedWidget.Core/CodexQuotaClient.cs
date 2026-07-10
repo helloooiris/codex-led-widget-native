@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace CodexLedWidget.Core;
 
@@ -37,15 +38,15 @@ public sealed class CodexQuotaClient
 
         try
         {
-            await SendAsync(process, 1, "initialize", new
+            await SendAsync(process, 1, "initialize", new JsonObject
             {
-                clientInfo = new
+                ["clientInfo"] = new JsonObject
                 {
-                    name = "codex-led-widget-native",
-                    title = "Codex LED Widget",
-                    version = "0.1.0"
+                    ["name"] = "codex-led-widget-native",
+                    ["title"] = "Codex LED Widget",
+                    ["version"] = "0.1.0"
                 },
-                capabilities = (object?)null
+                ["capabilities"] = null
             }, timeout.Token).ConfigureAwait(false);
             await ReadResultAsync(process, 1, timeout.Token).ConfigureAwait(false);
 
@@ -98,13 +99,19 @@ public sealed class CodexQuotaClient
             ?? throw new InvalidOperationException("无法启动 Codex CLI。");
     }
 
-    private static Task SendAsync(Process process, int id, string method, object? parameters, CancellationToken cancellationToken)
+    private static Task SendAsync(Process process, int id, string method, JsonNode? parameters, CancellationToken cancellationToken)
     {
-        object payload = parameters is null
-            ? new { id, method }
-            : new { id, method, @params = parameters };
-        string line = JsonSerializer.Serialize(payload);
-        return process.StandardInput.WriteLineAsync(line.AsMemory(), cancellationToken);
+        JsonObject payload = new()
+        {
+            ["id"] = id,
+            ["method"] = method
+        };
+        if (parameters is not null)
+        {
+            payload["params"] = parameters;
+        }
+
+        return process.StandardInput.WriteLineAsync(payload.ToJsonString().AsMemory(), cancellationToken);
     }
 
     private static async Task<string> ReadResultAsync(Process process, int id, CancellationToken cancellationToken)

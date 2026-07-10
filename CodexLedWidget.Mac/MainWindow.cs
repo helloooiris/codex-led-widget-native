@@ -34,6 +34,8 @@ public sealed class MainWindow : Window
     private readonly Ellipse statusDot = new();
     private readonly Button pinButton = new();
     private TrayIcon? trayIcon;
+    private NativeMenuItem? toggleModeMenuItem;
+    private NativeMenuItem? pinMenuItem;
     private bool isTopmost = true;
     private bool isEnglish;
     private QuotaSnapshot? lastSnapshot;
@@ -426,9 +428,11 @@ public sealed class MainWindow : Window
     {
         NativeMenu menu = new();
         menu.Items.Add(MenuItem(isEnglish ? "Show/Hide" : "显示/隐藏", ToggleWindow));
-        menu.Items.Add(MenuItem(viewMode == WidgetViewMode.Panel ? (isEnglish ? "Collapse orb" : "收起悬浮球") : (isEnglish ? "Expand panel" : "展开面板"), ToggleWidgetMode));
+        toggleModeMenuItem = MenuItem(ModeMenuText(), ToggleWidgetMode);
+        menu.Items.Add(toggleModeMenuItem);
         menu.Items.Add(MenuItem(isEnglish ? "Refresh quota" : "刷新额度", async () => await RefreshQuotaAsync()));
-        menu.Items.Add(MenuItem(isTopmost ? (isEnglish ? "Unpin" : "取消置顶") : (isEnglish ? "Pin on top" : "置顶"), ToggleTopmost));
+        pinMenuItem = MenuItem(PinMenuText(), ToggleTopmost);
+        menu.Items.Add(pinMenuItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(MenuItem(isEnglish ? "Exit" : "退出", Shutdown));
         return menu;
@@ -436,10 +440,29 @@ public sealed class MainWindow : Window
 
     private void UpdateTrayMenu()
     {
-        if (trayIcon is not null)
+        if (toggleModeMenuItem is not null)
         {
-            trayIcon.Menu = BuildTrayMenu();
+            toggleModeMenuItem.Header = ModeMenuText();
         }
+
+        if (pinMenuItem is not null)
+        {
+            pinMenuItem.Header = PinMenuText();
+        }
+    }
+
+    private string ModeMenuText()
+    {
+        return viewMode == WidgetViewMode.Panel
+            ? (isEnglish ? "Collapse orb" : "收起悬浮球")
+            : (isEnglish ? "Expand panel" : "展开面板");
+    }
+
+    private string PinMenuText()
+    {
+        return isTopmost
+            ? (isEnglish ? "Unpin" : "取消置顶")
+            : (isEnglish ? "Pin on top" : "置顶");
     }
 
     private static NativeMenuItem MenuItem(string header, Action action)
