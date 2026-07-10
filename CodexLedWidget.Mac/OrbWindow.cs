@@ -12,6 +12,7 @@ public sealed class OrbWindow : Window
 {
     private readonly Action expandPanel;
     private readonly QuotaOrbControl quotaOrb = new();
+    private readonly ScaleTransform pressScale = new(1, 1);
     private Point? mouseDownPoint;
     private PixelPoint windowOrigin;
     private bool wasDragged;
@@ -28,6 +29,7 @@ public sealed class OrbWindow : Window
         MaxHeight = 138;
         CanResize = false;
         ShowInTaskbar = false;
+        ShowActivated = false;
         Topmost = true;
         WindowDecorations = Avalonia.Controls.WindowDecorations.None;
         Background = Brushes.Transparent;
@@ -52,6 +54,8 @@ public sealed class OrbWindow : Window
         root.PointerPressed += OrbPointerPressed;
         root.PointerMoved += OrbPointerMoved;
         root.PointerReleased += OrbPointerReleased;
+        root.RenderTransform = pressScale;
+        root.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
 
         root.Children.Add(new Ellipse
         {
@@ -90,6 +94,7 @@ public sealed class OrbWindow : Window
         mouseDownPoint = e.GetPosition(this);
         windowOrigin = Position;
         wasDragged = false;
+        SetPressed(true);
         e.Pointer.Capture(sender as IInputElement);
     }
 
@@ -108,6 +113,7 @@ public sealed class OrbWindow : Window
         }
 
         wasDragged = true;
+        SetPressed(false);
         Position = new PixelPoint(
             windowOrigin.X + (int)Math.Round(delta.X),
             windowOrigin.Y + (int)Math.Round(delta.Y));
@@ -118,11 +124,19 @@ public sealed class OrbWindow : Window
         bool shouldExpandPanel = mouseDownPoint.HasValue && !wasDragged;
         mouseDownPoint = null;
         wasDragged = false;
+        SetPressed(false);
         e.Pointer.Capture(null);
 
         if (shouldExpandPanel)
         {
             expandPanel();
         }
+    }
+
+    private void SetPressed(bool pressed)
+    {
+        double scale = pressed ? 0.96 : 1;
+        pressScale.ScaleX = scale;
+        pressScale.ScaleY = scale;
     }
 }

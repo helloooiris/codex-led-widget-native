@@ -15,7 +15,8 @@
 - 显示重置时间，例如 `6月8日 19:03`，方便你和时间谈判
 - 支持中文 / English 切换，焦虑也可以国际化
 - 支持窗口置顶、隐藏、刷新、退出，想看就看，想逃避也可以
-- macOS 支持一键收起为液态玻璃悬浮球，单击悬浮球可重新打开面板，右键菜单可刷新或退出
+- macOS 支持一键收起为液态玻璃悬浮球，单击悬浮球可丝滑展开面板，右键菜单可刷新或退出
+- macOS 每 10 秒自动同步额度，并在额度重置时立即显示 100%，无需手动点击刷新
 - 支持等比缩放，避免文字位图拉伸发糊
 - 原生 WPF 窗口，框架依赖版约 214KB，单文件自包含版约 71MB
 
@@ -27,7 +28,7 @@
 - .NET SDK 9
 - 已安装并登录 Codex CLI
 
-macOS 试验版需要：
+macOS 版源码构建需要：
 
 - macOS 13+
 - .NET SDK 10
@@ -50,7 +51,7 @@ dotnet build .\CodexLedWidgetNative.sln
 dotnet run --project .\CodexLedWidget.Wpf\CodexLedWidget.Wpf.csproj
 ```
 
-macOS 试验版：
+macOS 版：
 
 ```bash
 dotnet restore ./CodexLedWidget.Mac/CodexLedWidget.Mac.csproj
@@ -86,7 +87,7 @@ dotnet publish .\CodexLedWidget.Wpf\CodexLedWidget.Wpf.csproj `
   -o .\publish\single-file
 ```
 
-macOS Apple Silicon 试验版：
+macOS Apple Silicon：
 
 ```bash
 ./scripts/package-macos-app.sh
@@ -94,6 +95,8 @@ open ./publish/Codex\ LED\ Widget.app
 ```
 
 生成的 `.app` 是自包含发布包，不要求目标机器安装 .NET Runtime；目标机器仍需要安装并登录 Codex CLI。
+
+普通用户可以直接从 GitHub Releases 下载 `Codex-LED-Widget-macOS-arm64.zip`，解压后将应用拖入“应用程序”目录。首次启动若被 macOS 拦截，请在 Finder 中右键应用并选择“打开”。
 
 ## 隐私说明
 

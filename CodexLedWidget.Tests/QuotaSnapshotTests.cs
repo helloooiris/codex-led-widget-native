@@ -75,6 +75,26 @@ public sealed class QuotaSnapshotTests
     }
 
     [TestMethod]
+    public void ElapsedWindowImmediatelyResetsToFullWhileFutureWindowIsPreserved()
+    {
+        DateTimeOffset now = new(2026, 7, 11, 9, 0, 0, TimeSpan.FromHours(8));
+        QuotaSnapshot snapshot = new(
+            LimitId: "codex",
+            LimitName: "Codex",
+            PlanType: "pro",
+            Primary: new QuotaWindow(UsedPercent: 43, RemainingPercent: 57, WindowDuration: TimeSpan.FromHours(5), ResetsAt: now.AddSeconds(-1)),
+            Secondary: new QuotaWindow(UsedPercent: 7, RemainingPercent: 93, WindowDuration: TimeSpan.FromDays(7), ResetsAt: now.AddDays(2)),
+            FetchedAt: now.AddMinutes(-3));
+
+        QuotaSnapshot projected = snapshot.ApplyElapsedResets(now);
+
+        Assert.AreEqual(100, projected.Primary?.RemainingPercent);
+        Assert.AreEqual(0, projected.Primary?.UsedPercent);
+        Assert.IsNull(projected.Primary?.ResetsAt);
+        Assert.AreEqual(snapshot.Secondary, projected.Secondary);
+    }
+
+    [TestMethod]
     public void WidgetLayoutUsesPanelAndFloatingOrbModes()
     {
         WidgetWindowLayout panel = WidgetLayout.ForMode(WidgetViewMode.Panel);

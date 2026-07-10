@@ -10,17 +10,19 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using CodexLedWidget.Core;
+using System.Diagnostics;
 
 namespace CodexLedWidget.Mac;
 
 public sealed class MainWindow : Window
 {
+    private static readonly PixelPoint ParkedPosition = new(-20000, -20000);
     private readonly CodexQuotaClient quotaClient = new();
     private readonly DispatcherTimer refreshTimer;
+    private readonly DispatcherTimer resetTimer;
     private readonly ContentControl panelView = new();
-    private readonly ContentControl floatingOrbView = new();
+    private readonly ScaleTransform panelScale = new(1, 1);
     private readonly QuotaOrbControl panelQuotaOrb = new();
-    private readonly QuotaOrbControl floatingQuotaOrb = new();
     private readonly TextBlock stateText = new();
     private readonly TextBlock statusText = new();
     private readonly TextBlock primaryLabel = new();
@@ -34,18 +36,17 @@ public sealed class MainWindow : Window
     private readonly Ellipse statusDot = new();
     private readonly Button pinButton = new();
     private TrayIcon? trayIcon;
+    private OrbWindow? orbWindow;
     private NativeMenuItem? toggleModeMenuItem;
     private NativeMenuItem? pinMenuItem;
     private bool isTopmost = true;
     private bool isEnglish;
+    private bool isRefreshing;
+    private bool isTransitioning;
     private QuotaSnapshot? lastSnapshot;
     private WidgetViewMode viewMode = WidgetViewMode.Panel;
     private DualQuotaMeter currentMeter = DualQuotaMeter.FromSnapshot(CreateEmptySnapshot(), "zh-CN");
     private PixelPoint expandedPosition = default;
-    private Size expandedSize = default;
-    private Point? floatingMouseDownPoint;
-    private PixelPoint floatingWindowOrigin;
-    private bool floatingWasDragged;
 
     public MainWindow()
     {
@@ -63,19 +64,24 @@ public sealed class MainWindow : Window
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         Content = BuildRoot();
 
-        refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
-        refreshTimer.Tick += async (_, _) => await RefreshQuotaAsync();
+        refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        refreshTimer.Tick += async (_, _) => await RefreshQuotaAsync(showLoading: false);
+        resetTimer = new DispatcherTimer();
+        resetTimer.Tick += async (_, _) => await HandleQuotaResetAsync();
 
         Opened += async (_, _) =>
         {
             PlaceWindowTopRight();
             CreateTrayIcon();
+            PrewarmOrbWindow();
             refreshTimer.Start();
             await RefreshQuotaAsync();
         };
         Closed += (_, _) =>
         {
             refreshTimer.Stop();
+            resetTimer.Stop();
+            orbWindow?.Close();
             trayIcon?.Dispose();
         };
     }
@@ -88,10 +94,9 @@ public sealed class MainWindow : Window
         };
 
         panelView.Content = BuildPanel();
-        floatingOrbView.Content = BuildFloatingOrb();
-        floatingOrbView.IsVisible = false;
+        panelView.RenderTransform = panelScale;
+        panelView.RenderTransformOrigin = new RelativePoint(1, 0, RelativeUnit.Relative);
         root.Children.Add(panelView);
-        root.Children.Add(floatingOrbView);
         return root;
     }
 
@@ -235,54 +240,80 @@ public sealed class MainWindow : Window
         return content;
     }
 
-    private Control BuildFloatingOrb()
+    private async Task RefreshQuotaAsync(bool showLoading = true)
     {
-        Viewbox viewbox = new() { Stretch = Stretch.Uniform };
-        Grid orbRoot = new()
+        if (isRefreshing)
         {
-            Width = 138,
-            Height = 138,
-            Cursor = new Cursor(StandardCursorType.Hand),
-            Background = new SolidColorBrush(Color.FromArgb(1, 255, 255, 255))
-        };
-        orbRoot.PointerPressed += FloatingOrb_PointerPressed;
-        orbRoot.PointerMoved += FloatingOrb_PointerMoved;
-        orbRoot.PointerReleased += FloatingOrb_PointerReleased;
+            return;
+        }
 
-        orbRoot.Children.Add(new Ellipse
+        isRefreshing = true;
+        if (showLoading && lastSnapshot is null)
         {
-            Width = 132,
-            Height = 132,
-            Fill = new SolidColorBrush(Color.FromArgb(48, 255, 255, 255)),
-            Stroke = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)),
-            StrokeThickness = 1.2
-        });
-        floatingQuotaOrb.Width = 118;
-        floatingQuotaOrb.Height = 118;
-        floatingQuotaOrb.HorizontalAlignment = HorizontalAlignment.Center;
-        floatingQuotaOrb.VerticalAlignment = VerticalAlignment.Center;
-        orbRoot.Children.Add(floatingQuotaOrb);
-
-        viewbox.Child = orbRoot;
-        return viewbox;
-    }
-
-    private async Task RefreshQuotaAsync()
-    {
-        SetLoading();
+            SetLoading();
+        }
 
         try
         {
-            lastSnapshot = await quotaClient.GetQuotaAsync();
+            QuotaSnapshot snapshot = await quotaClient.GetQuotaAsync();
+            lastSnapshot = snapshot.ApplyElapsedResets(DateTimeOffset.Now);
             RenderQuota(lastSnapshot);
+            ScheduleNextReset();
         }
         catch (Exception ex)
         {
             stateText.Text = isEnglish ? "Error" : "读取失败";
             statusText.Text = ex.Message;
-            RenderMeter(DualQuotaMeter.FromSnapshot(CreateEmptySnapshot(), CultureName));
+            if (lastSnapshot is null)
+            {
+                RenderMeter(DualQuotaMeter.FromSnapshot(CreateEmptySnapshot(), CultureName));
+            }
+
             SetStateBrush(Color.FromRgb(205, 92, 92));
         }
+        finally
+        {
+            isRefreshing = false;
+        }
+    }
+
+    private async Task HandleQuotaResetAsync()
+    {
+        resetTimer.Stop();
+        if (lastSnapshot is not null)
+        {
+            lastSnapshot = lastSnapshot.ApplyElapsedResets(DateTimeOffset.Now);
+            RenderQuota(lastSnapshot);
+            ScheduleNextReset();
+        }
+
+        await RefreshQuotaAsync(showLoading: false);
+    }
+
+    private void ScheduleNextReset()
+    {
+        resetTimer.Stop();
+        if (lastSnapshot is null)
+        {
+            return;
+        }
+
+        DateTimeOffset now = DateTimeOffset.Now;
+        DateTimeOffset? nextReset = new[]
+        {
+            lastSnapshot.Primary?.ResetsAt,
+            lastSnapshot.Secondary?.ResetsAt
+        }
+        .Where(value => value is not null && value > now)
+        .Min();
+
+        if (nextReset is null)
+        {
+            return;
+        }
+
+        resetTimer.Interval = nextReset.Value - now;
+        resetTimer.Start();
     }
 
     private void SetLoading()
@@ -323,7 +354,7 @@ public sealed class MainWindow : Window
     {
         currentMeter = meter;
         panelQuotaOrb.Render(meter);
-        floatingQuotaOrb.Render(meter);
+        orbWindow?.Render(meter);
     }
 
     private void ToggleLanguage()
@@ -341,35 +372,58 @@ public sealed class MainWindow : Window
     {
         isTopmost = !isTopmost;
         Topmost = isTopmost;
+        if (orbWindow is not null)
+        {
+            orbWindow.Topmost = isTopmost;
+        }
 
         pinButton.Opacity = isTopmost ? 1 : 0.6;
         UpdateTrayMenu();
     }
 
-    private void CollapseToFloatingOrb()
+    private async void CollapseToFloatingOrb()
     {
-        if (viewMode == WidgetViewMode.FloatingOrb)
+        if (viewMode == WidgetViewMode.FloatingOrb || isTransitioning)
         {
             return;
         }
 
-        expandedPosition = Position;
-        expandedSize = new Size(Width, Height);
-        int right = Position.X + (int)Math.Round(Width);
-        WidgetWindowLayout layout = WidgetLayout.ForMode(WidgetViewMode.FloatingOrb);
+        isTransitioning = true;
+        try
+        {
+            expandedPosition = Position;
+            WidgetWindowLayout layout = WidgetLayout.ForMode(WidgetViewMode.FloatingOrb);
+            PixelPoint target = GetOrbTarget();
+            OrbWindow orb = EnsureOrbWindow();
+            double targetScaleX = layout.Width / Width;
+            double targetScaleY = layout.Height / Height;
 
-        viewMode = WidgetViewMode.FloatingOrb;
-        panelView.IsVisible = false;
-        floatingOrbView.IsVisible = true;
-        CanResize = layout.CanResize;
-        MinWidth = layout.MinWidth;
-        MinHeight = layout.MinHeight;
-        MaxWidth = layout.Width;
-        MaxHeight = layout.Height;
-        Width = layout.Width;
-        Height = layout.Height;
-        Position = new PixelPoint(right - (int)layout.Width, expandedPosition.Y);
-        UpdateTrayMenu();
+            orb.Render(currentMeter);
+            orb.Position = target;
+            orb.Opacity = 0;
+            orb.Show();
+            await AnimateTransitionAsync(progress =>
+            {
+                panelScale.ScaleX = Lerp(1, targetScaleX, progress);
+                panelScale.ScaleY = Lerp(1, targetScaleY, progress);
+                panelView.Opacity = 1 - progress;
+                orb.Opacity = Math.Clamp((progress - 0.55) / 0.45, 0, 1);
+            });
+
+            Opacity = 0;
+            Position = ParkedPosition;
+            panelScale.ScaleX = 1;
+            panelScale.ScaleY = 1;
+            panelView.Opacity = 1;
+            orb.Opacity = 1;
+            orb.Position = target;
+            viewMode = WidgetViewMode.FloatingOrb;
+            UpdateTrayMenu();
+        }
+        finally
+        {
+            isTransitioning = false;
+        }
     }
 
     private void HideToMenuBar()
@@ -386,7 +440,7 @@ public sealed class MainWindow : Window
         SetStateBrush(Color.FromRgb(241, 183, 47));
     }
 
-    private void ExpandPanel()
+    private async void ExpandPanel()
     {
         if (viewMode == WidgetViewMode.Panel)
         {
@@ -396,22 +450,113 @@ public sealed class MainWindow : Window
             return;
         }
 
-        WidgetWindowLayout layout = WidgetLayout.ForMode(WidgetViewMode.Panel);
-        viewMode = WidgetViewMode.Panel;
-        floatingOrbView.IsVisible = false;
-        panelView.IsVisible = true;
-        MaxWidth = double.PositiveInfinity;
-        MaxHeight = double.PositiveInfinity;
-        MinWidth = layout.MinWidth;
-        MinHeight = layout.MinHeight;
-        CanResize = layout.CanResize;
-        Position = expandedPosition;
-        Width = expandedSize.Width > 0 ? expandedSize.Width : layout.Width;
-        Height = expandedSize.Height > 0 ? expandedSize.Height : layout.Height;
-        Show();
-        Activate();
-        UpdateTrayMenu();
+        if (isTransitioning)
+        {
+            return;
+        }
+
+        isTransitioning = true;
+        try
+        {
+            OrbWindow orb = EnsureOrbWindow();
+            WidgetWindowLayout layout = WidgetLayout.ForMode(WidgetViewMode.FloatingOrb);
+            double startScaleX = layout.Width / Width;
+            double startScaleY = layout.Height / Height;
+
+            panelScale.ScaleX = startScaleX;
+            panelScale.ScaleY = startScaleY;
+            panelView.Opacity = 0;
+            Position = expandedPosition;
+            Opacity = 1;
+            if (!IsVisible)
+            {
+                Show();
+            }
+
+            await AnimateTransitionAsync(progress =>
+            {
+                panelScale.ScaleX = Lerp(startScaleX, 1, progress);
+                panelScale.ScaleY = Lerp(startScaleY, 1, progress);
+                panelView.Opacity = progress;
+                orb.Opacity = 1 - Math.Clamp(progress / 0.45, 0, 1);
+            });
+
+            panelScale.ScaleX = 1;
+            panelScale.ScaleY = 1;
+            panelView.Opacity = 1;
+            orb.Hide();
+            orb.Opacity = 1;
+            viewMode = WidgetViewMode.Panel;
+            Activate();
+            UpdateTrayMenu();
+        }
+        finally
+        {
+            isTransitioning = false;
+        }
     }
+
+    private OrbWindow EnsureOrbWindow()
+    {
+        if (orbWindow is null)
+        {
+            orbWindow = new OrbWindow(ExpandPanel)
+            {
+                Topmost = isTopmost
+            };
+        }
+
+        return orbWindow;
+    }
+
+    private void PrewarmOrbWindow()
+    {
+        OrbWindow orb = EnsureOrbWindow();
+        orb.Render(currentMeter);
+        orb.Position = GetOrbTarget();
+        orb.Opacity = 0;
+        orb.Show();
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (viewMode == WidgetViewMode.Panel)
+            {
+                orb.Hide();
+                orb.Opacity = 1;
+            }
+        }, DispatcherPriority.Background);
+    }
+
+    private PixelPoint GetOrbTarget()
+    {
+        WidgetWindowLayout layout = WidgetLayout.ForMode(WidgetViewMode.FloatingOrb);
+        int right = Position.X + (int)Math.Round(Width);
+        return new PixelPoint(right - (int)layout.Width, Position.Y);
+    }
+
+    private static Task AnimateTransitionAsync(Action<double> update)
+    {
+        TimeSpan duration = TimeSpan.FromMilliseconds(260);
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        TaskCompletionSource<bool> completion = new();
+        DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(8) };
+        timer.Tick += (_, _) =>
+        {
+            double raw = Math.Clamp(stopwatch.Elapsed.TotalMilliseconds / duration.TotalMilliseconds, 0, 1);
+            double eased = raw * raw * (3 - 2 * raw);
+            update(eased);
+            if (raw >= 1)
+            {
+                timer.Stop();
+                completion.TrySetResult(true);
+            }
+        };
+        update(0);
+        timer.Start();
+        return completion.Task;
+    }
+
+    private static double Lerp(double start, double end, double progress) =>
+        start + ((end - start) * progress);
 
     private void CreateTrayIcon()
     {
@@ -485,14 +630,14 @@ public sealed class MainWindow : Window
     {
         if (viewMode == WidgetViewMode.FloatingOrb)
         {
-            if (IsVisible)
+            OrbWindow orb = EnsureOrbWindow();
+            if (orb.IsVisible)
             {
-                Hide();
+                orb.Hide();
                 return;
             }
 
-            Show();
-            Activate();
+            orb.Show();
             return;
         }
 
@@ -511,59 +656,6 @@ public sealed class MainWindow : Window
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && e.Source is not Button)
         {
             BeginMoveDrag(e);
-        }
-    }
-
-    private void FloatingOrb_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        PointerPoint point = e.GetCurrentPoint(this);
-        if (point.Properties.IsRightButtonPressed)
-        {
-            ExpandPanel();
-            return;
-        }
-
-        if (!point.Properties.IsLeftButtonPressed)
-        {
-            return;
-        }
-
-        floatingMouseDownPoint = e.GetPosition(this);
-        floatingWindowOrigin = Position;
-        floatingWasDragged = false;
-        e.Pointer.Capture(sender as IInputElement);
-    }
-
-    private void FloatingOrb_PointerMoved(object? sender, PointerEventArgs e)
-    {
-        if (floatingMouseDownPoint is not Point startPoint)
-        {
-            return;
-        }
-
-        Point currentPoint = e.GetPosition(this);
-        Vector delta = currentPoint - startPoint;
-        if (Math.Abs(delta.X) < 4 && Math.Abs(delta.Y) < 4)
-        {
-            return;
-        }
-
-        floatingWasDragged = true;
-        Position = new PixelPoint(
-            floatingWindowOrigin.X + (int)Math.Round(delta.X),
-            floatingWindowOrigin.Y + (int)Math.Round(delta.Y));
-    }
-
-    private void FloatingOrb_PointerReleased(object? sender, PointerReleasedEventArgs e)
-    {
-        bool shouldExpandPanel = floatingMouseDownPoint.HasValue && !floatingWasDragged;
-        floatingMouseDownPoint = null;
-        floatingWasDragged = false;
-        e.Pointer.Capture(null);
-
-        if (shouldExpandPanel)
-        {
-            ExpandPanel();
         }
     }
 

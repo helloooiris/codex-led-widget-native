@@ -3,6 +3,7 @@ bin/
 obj/
 publish/
 artifacts/
+CodexLedWidget.Mac/Assets/AppIcon-1024.png
 
 # Visual Studio / Rider
 .vs/
