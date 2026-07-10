@@ -10,7 +10,6 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using CodexLedWidget.Core;
-using System.Diagnostics;
 
 namespace CodexLedWidget.Mac;
 
@@ -18,7 +17,6 @@ public sealed class MainWindow : Window
 {
     private readonly CodexQuotaClient quotaClient = new();
     private readonly DispatcherTimer refreshTimer;
-    private readonly DispatcherTimer panelSignalTimer;
     private readonly ContentControl panelView = new();
     private readonly ContentControl floatingOrbView = new();
     private readonly QuotaOrbControl panelQuotaOrb = new();
@@ -36,7 +34,6 @@ public sealed class MainWindow : Window
     private readonly Ellipse statusDot = new();
     private readonly Button pinButton = new();
     private TrayIcon? trayIcon;
-    private OrbWindow? orbWindow = null;
     private bool isTopmost = true;
     private bool isEnglish;
     private QuotaSnapshot? lastSnapshot;
@@ -47,7 +44,6 @@ public sealed class MainWindow : Window
     private Point? floatingMouseDownPoint;
     private PixelPoint floatingWindowOrigin;
     private bool floatingWasDragged;
-    private DateTime lastPanelSignalWriteUtc = DateTime.MinValue;
 
     public MainWindow()
     {
@@ -67,23 +63,17 @@ public sealed class MainWindow : Window
 
         refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
         refreshTimer.Tick += async (_, _) => await RefreshQuotaAsync();
-        panelSignalTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-        panelSignalTimer.Tick += (_, _) => CheckPanelSignal();
 
         Opened += async (_, _) =>
         {
             PlaceWindowTopRight();
             CreateTrayIcon();
-            InitializePanelSignalCheckpoint();
             refreshTimer.Start();
-            panelSignalTimer.Start();
             await RefreshQuotaAsync();
         };
         Closed += (_, _) =>
         {
             refreshTimer.Stop();
-            panelSignalTimer.Stop();
-            orbWindow?.Close();
             trayIcon?.Dispose();
         };
     }
@@ -332,7 +322,6 @@ public sealed class MainWindow : Window
         currentMeter = meter;
         panelQuotaOrb.Render(meter);
         floatingQuotaOrb.Render(meter);
-        orbWindow?.Render(meter);
     }
 
     private void ToggleLanguage()
@@ -350,10 +339,6 @@ public sealed class MainWindow : Window
     {
         isTopmost = !isTopmost;
         Topmost = isTopmost;
-        if (orbWindow is not null)
-        {
-            orbWindow.Topmost = isTopmost;
-        }
 
         pinButton.Opacity = isTopmost ? 1 : 0.6;
         UpdateTrayMenu();
@@ -361,9 +346,28 @@ public sealed class MainWindow : Window
 
     private void CollapseToFloatingOrb()
     {
-        InitializePanelSignalCheckpoint();
-        StartOrbHelper();
-        Close();
+        if (viewMode == WidgetViewMode.FloatingOrb)
+        {
+            return;
+        }
+
+        expandedPosition = Position;
+        expandedSize = new Size(Width, Height);
+        int right = Position.X + (int)Math.Round(Width);
+        WidgetWindowLayout layout = WidgetLayout.ForMode(WidgetViewMode.FloatingOrb);
+
+        viewMode = WidgetViewMode.FloatingOrb;
+        panelView.IsVisible = false;
+        floatingOrbView.IsVisible = true;
+        CanResize = layout.CanResize;
+        MinWidth = layout.MinWidth;
+        MinHeight = layout.MinHeight;
+        MaxWidth = layout.Width;
+        MaxHeight = layout.Height;
+        Width = layout.Width;
+        Height = layout.Height;
+        Position = new PixelPoint(right - (int)layout.Width, expandedPosition.Y);
+        UpdateTrayMenu();
     }
 
     private void HideToMenuBar()
@@ -380,110 +384,31 @@ public sealed class MainWindow : Window
         SetStateBrush(Color.FromRgb(241, 183, 47));
     }
 
-    private void StartOrbHelper()
-    {
-        string helperPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "Helpers",
-            "CodexLedOrb"));
-
-        if (!File.Exists(helperPath))
-        {
-            statusText.Text = isEnglish
-                ? "Floating orb helper was not found."
-                : "未找到悬浮球组件。";
-            SetStateBrush(Color.FromRgb(241, 183, 47));
-            return;
-        }
-
-        TerminateOrbHelpers();
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = helperPath,
-            UseShellExecute = false
-        });
-    }
-
-    private static void TerminateOrbHelpers()
-    {
-        try
-        {
-            ProcessStartInfo startInfo = new()
-            {
-                FileName = "/usr/bin/pkill",
-                UseShellExecute = false
-            };
-            startInfo.ArgumentList.Add("-f");
-            startInfo.ArgumentList.Add("CodexLedOrb");
-            using Process? process = Process.Start(startInfo);
-            process?.WaitForExit(800);
-        }
-        catch
-        {
-        }
-    }
-
     private void ExpandPanel()
     {
         if (viewMode == WidgetViewMode.Panel)
         {
             Show();
             Activate();
-            TerminateOrbHelpers();
             UpdateTrayMenu();
             return;
         }
 
         WidgetWindowLayout layout = WidgetLayout.ForMode(WidgetViewMode.Panel);
         viewMode = WidgetViewMode.Panel;
-        orbWindow?.Hide();
+        floatingOrbView.IsVisible = false;
+        panelView.IsVisible = true;
+        MaxWidth = double.PositiveInfinity;
+        MaxHeight = double.PositiveInfinity;
         MinWidth = layout.MinWidth;
         MinHeight = layout.MinHeight;
+        CanResize = layout.CanResize;
         Position = expandedPosition;
         Width = expandedSize.Width > 0 ? expandedSize.Width : layout.Width;
         Height = expandedSize.Height > 0 ? expandedSize.Height : layout.Height;
         Show();
         Activate();
-        TerminateOrbHelpers();
         UpdateTrayMenu();
-    }
-
-    private void InitializePanelSignalCheckpoint()
-    {
-        string path = PanelSignalPath();
-        lastPanelSignalWriteUtc = File.Exists(path)
-            ? File.GetLastWriteTimeUtc(path)
-            : DateTime.MinValue;
-    }
-
-    private void CheckPanelSignal()
-    {
-        string path = PanelSignalPath();
-        if (!File.Exists(path))
-        {
-            return;
-        }
-
-        DateTime writeUtc = File.GetLastWriteTimeUtc(path);
-        if (writeUtc <= lastPanelSignalWriteUtc)
-        {
-            return;
-        }
-
-        lastPanelSignalWriteUtc = writeUtc;
-        ExpandPanel();
-    }
-
-    private static string PanelSignalPath()
-    {
-        string appSupport = OperatingSystem.IsMacOS()
-            ? System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Library",
-                "Application Support")
-            : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return System.IO.Path.Combine(appSupport, "Codex LED Widget", "show-panel.signal");
     }
 
     private void CreateTrayIcon()
@@ -535,15 +460,16 @@ public sealed class MainWindow : Window
 
     private void ToggleWindow()
     {
-        if (viewMode == WidgetViewMode.FloatingOrb && orbWindow is not null)
+        if (viewMode == WidgetViewMode.FloatingOrb)
         {
-            if (orbWindow.IsVisible)
+            if (IsVisible)
             {
-                orbWindow.Hide();
+                Hide();
                 return;
             }
 
-            orbWindow.Show();
+            Show();
+            Activate();
             return;
         }
 

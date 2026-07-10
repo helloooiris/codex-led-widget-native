@@ -8,10 +8,7 @@ APP_DIR="$ROOT_DIR/publish/Codex LED Widget.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
-HELPERS_DIR="$CONTENTS_DIR/Helpers"
 EXECUTABLE="CodexLedWidget.Mac"
-HELPER_EXECUTABLE="CodexLedOrb"
-HELPER_SOURCE="$ROOT_DIR/CodexLedWidget.NativeMac/main.swift"
 ICON_PNG="$ROOT_DIR/CodexLedWidget.Mac/Assets/AppIcon-1024.png"
 ICONSET_DIR="$ROOT_DIR/publish/AppIcon.iconset"
 ICON_ICNS="$ROOT_DIR/publish/AppIcon.icns"
@@ -23,20 +20,15 @@ dotnet publish "$PROJECT" \
   -r osx-arm64 \
   --self-contained true \
   -p:PublishSingleFile=false \
+  -p:PublishReadyToRun=true \
   -p:DebugType=None \
   -p:DebugSymbols=false \
   -o "$PUBLISH_DIR"
 
 rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$HELPERS_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp -R "$PUBLISH_DIR/." "$MACOS_DIR/"
 chmod +x "$MACOS_DIR/$EXECUTABLE"
-
-xcrun swiftc "$HELPER_SOURCE" \
-  -O \
-  -framework Cocoa \
-  -o "$HELPERS_DIR/$HELPER_EXECUTABLE"
-chmod +x "$HELPERS_DIR/$HELPER_EXECUTABLE"
 
 rm -rf "$ICONSET_DIR"
 mkdir -p "$ICONSET_DIR"

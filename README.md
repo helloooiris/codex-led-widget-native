@@ -4,7 +4,7 @@
 
 它会悬在桌面上，用一个看起来很无辜的玻璃小球提醒你：今天的 5h 额度和 1week 额度正在安静地蒸发。
 
-这是原生桌面版：Windows 使用 WPF / .NET 9，macOS 使用 Avalonia / .NET 10 + Swift/AppKit 原生悬浮球。目标是保留液态玻璃小组件的呈现效果，同时摆脱 Electron 打包后“一个额度提醒器比论文还重”的尴尬。
+这是原生桌面版：Windows 使用 WPF / .NET 9，macOS 使用 Avalonia / .NET 10。目标是保留液态玻璃小组件的呈现效果，同时摆脱 Electron 打包后“一个额度提醒器比论文还重”的尴尬。
 
 > 本项目受 [xicunwus2025-sys/codex-led-widget](https://github.com/xicunwus2025-sys/codex-led-widget) 启发，并保留对原项目的署名说明。
 
@@ -31,7 +31,6 @@ macOS 试验版需要：
 
 - macOS 13+
 - .NET SDK 10
-- Xcode Command Line Tools
 - Python 3 + Pillow（用于生成 AppIcon）
 - 已安装并登录 Codex CLI
 
