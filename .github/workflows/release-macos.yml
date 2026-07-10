@@ -1,0 +1,74 @@
+name: Release macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+        default: v0.2.0
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install icon dependency
+        run: python3 -m pip install --user Pillow
+
+      - name: Build macOS app
+        run: bash ./scripts/package-macos-app.sh
+
+      - name: Create clean release archive
+        run: >-
+          ditto -c -k --norsrc --keepParent
+          './publish/Codex LED Widget.app'
+          './publish/Codex-LED-Widget-macOS-arm64.zip'
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          notes_file="$(mktemp)"
+          cat > "$notes_file" <<'EOF'
+          ## macOS v0.2.0
+
+          - 每 10 秒自动同步 Codex 额度，无需手动点击刷新
+          - 到达额度重置时间后立即显示 100%
+          - 优化液态玻璃面板与悬浮球的展开、收起动画
+          - 悬浮球按下即时反馈，面板展开不再有明显延迟
+          - 使用单进程架构，修复托盘菜单与窗口切换崩溃
+          - 自包含 .app，无需另外安装 .NET Runtime
+
+          ### 安装
+
+          1. 下载 `Codex-LED-Widget-macOS-arm64.zip`
+          2. 解压后将 `Codex LED Widget.app` 拖入“应用程序”目录
+          3. 确保本机已安装并登录 Codex CLI
+          4. 首次启动若被 macOS 拦截，请在 Finder 中右键应用并选择“打开”
+
+          > 当前安装包适用于 Apple Silicon Mac（M1/M2/M3/M4 系列）。
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "Codex LED Widget $TAG" --notes-file "$notes_file" --latest
+            gh release upload "$TAG" './publish/Codex-LED-Widget-macOS-arm64.zip' --clobber
+          else
+            gh release create "$TAG" './publish/Codex-LED-Widget-macOS-arm64.zip' \
+              --title "Codex LED Widget $TAG" \
+              --notes-file "$notes_file" \
+              --latest
+          fi
