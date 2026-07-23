@@ -7,41 +7,71 @@ public static class QuotaSnapshotParser
     public static QuotaSnapshot ParseRateLimitsResponse(string json)
     {
         JsonNode root = JsonNode.Parse(json) ?? throw new InvalidOperationException("Codex 返回了空响应。");
-        JsonNode snapshotNode = ResolveSnapshotNode(root)
+        IReadOnlyList<JsonNode> buckets = ResolveBuckets(root);
+        JsonNode snapshotNode = buckets.FirstOrDefault()
             ?? throw new InvalidOperationException("Codex 响应中没有额度窗口。");
+        List<QuotaWindow> windows = buckets
+            .SelectMany(ParseWindows)
+            .Take(2)
+            .ToList();
 
         return new QuotaSnapshot(
             LimitId: ReadString(snapshotNode, "limitId") ?? "codex",
             LimitName: ReadString(snapshotNode, "limitName") ?? "Codex",
             PlanType: ReadString(snapshotNode, "planType") ?? "unknown",
-            Primary: ParseWindow(snapshotNode["primary"]),
-            Secondary: ParseWindow(snapshotNode["secondary"]),
-            FetchedAt: DateTimeOffset.Now);
+            Primary: windows.ElementAtOrDefault(0),
+            Secondary: windows.ElementAtOrDefault(1),
+            FetchedAt: DateTimeOffset.Now,
+            ResetCreditsAvailable: ReadInt(root["rateLimitResetCredits"], "availableCount"));
     }
 
-    private static JsonNode? ResolveSnapshotNode(JsonNode root)
+    private static IReadOnlyList<JsonNode> ResolveBuckets(JsonNode root)
     {
         JsonNode? byId = root["rateLimitsByLimitId"];
         if (byId is JsonObject map)
         {
+            List<JsonNode> buckets = [];
             if (map.TryGetPropertyValue("codex", out JsonNode? codex) && codex is not null)
             {
-                return codex;
+                buckets.Add(codex);
             }
 
             foreach (KeyValuePair<string, JsonNode?> item in map)
             {
-                if (item.Value is not null)
+                if (item.Key != "codex" && item.Value is not null)
                 {
-                    return item.Value;
+                    buckets.Add(item.Value);
                 }
+            }
+
+            if (buckets.Count > 0)
+            {
+                return buckets;
             }
         }
 
-        return root["rateLimits"];
+        return root["rateLimits"] is JsonNode fallback ? [fallback] : [];
     }
 
-    private static QuotaWindow? ParseWindow(JsonNode? node)
+    private static IEnumerable<QuotaWindow> ParseWindows(JsonNode bucket)
+    {
+        string limitId = ReadString(bucket, "limitId") ?? "codex";
+        string limitName = ReadString(bucket, "limitName") ?? (limitId == "codex" ? "Codex" : limitId);
+        QuotaWindow? primary = ParseWindow(bucket["primary"], limitId, limitName);
+        QuotaWindow? secondary = ParseWindow(bucket["secondary"], limitId, limitName);
+
+        if (primary is not null)
+        {
+            yield return primary;
+        }
+
+        if (secondary is not null)
+        {
+            yield return secondary;
+        }
+    }
+
+    private static QuotaWindow? ParseWindow(JsonNode? node, string limitId, string limitName)
     {
         if (node is null)
         {
@@ -57,7 +87,9 @@ public static class QuotaSnapshotParser
             UsedPercent: usedPercent,
             RemainingPercent: remainingPercent,
             WindowDuration: windowDurationMins is null ? null : TimeSpan.FromMinutes(windowDurationMins.Value),
-            ResetsAt: resetsAtSeconds is null ? null : DateTimeOffset.FromUnixTimeSeconds(resetsAtSeconds.Value).ToLocalTime());
+            ResetsAt: resetsAtSeconds is null ? null : DateTimeOffset.FromUnixTimeSeconds(resetsAtSeconds.Value).ToLocalTime(),
+            LimitId: limitId,
+            LimitName: limitName);
     }
 
     private static string? ReadString(JsonNode node, string propertyName)
@@ -65,8 +97,13 @@ public static class QuotaSnapshotParser
         return node[propertyName]?.GetValue<string>();
     }
 
-    private static int? ReadInt(JsonNode node, string propertyName)
+    private static int? ReadInt(JsonNode? node, string propertyName)
     {
+        if (node is null)
+        {
+            return null;
+        }
+
         JsonNode? value = node[propertyName];
         return value is null ? null : Convert.ToInt32(value.GetValue<double>());
     }

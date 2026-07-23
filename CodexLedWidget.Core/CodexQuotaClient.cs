@@ -44,7 +44,7 @@ public sealed class CodexQuotaClient
                 {
                     ["name"] = "codex-led-widget-native",
                     ["title"] = "Codex LED Widget",
-                    ["version"] = "0.1.0"
+                    ["version"] = "0.3.0"
                 },
                 ["capabilities"] = null
             }, timeout.Token).ConfigureAwait(false);

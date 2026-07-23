@@ -329,12 +329,15 @@ public sealed class MainWindow : Window
         QuotaSnapshot displaySnapshot = snapshot;
         int remaining = displaySnapshot.RemainingPercent ?? 0;
         RenderMeter(DualQuotaMeter.FromSnapshot(displaySnapshot, CultureName));
-        primaryLabel.Text = isEnglish ? "5h window" : "5小时窗口";
-        secondaryLabel.Text = isEnglish ? "7d window" : "7天窗口";
-        planLabel.Text = isEnglish ? "Plan" : "计划";
+        primaryLabel.Text = QuotaTextFormatter.FormatWindowLabel(displaySnapshot.Primary, CultureName);
+        secondaryLabel.Text = QuotaTextFormatter.FormatWindowLabel(displaySnapshot.Secondary, CultureName);
+        planLabel.Text = isEnglish ? "Plan / resets" : "计划 / 重置额度";
         primaryText.Text = QuotaTextFormatter.FormatWindow(displaySnapshot.Primary, CultureName);
         secondaryText.Text = QuotaTextFormatter.FormatWindow(displaySnapshot.Secondary, CultureName);
-        planText.Text = QuotaTextFormatter.FormatPlan(displaySnapshot.PlanType);
+        planText.Text = QuotaTextFormatter.FormatPlanSummary(
+            displaySnapshot.PlanType,
+            displaySnapshot.ResetCreditsAvailable,
+            CultureName);
         stateText.Text = remaining <= 0 ? (isEnglish ? "Empty" : "耗尽") : remaining < 10 ? (isEnglish ? "Low" : "偏低") : (isEnglish ? "Ready" : "可用");
         statusText.Text = $"{(isEnglish ? "Updated" : "已更新")} {DateTime.Now:HH:mm}";
         SetStateBrush(remaining <= 0 ? Color.FromRgb(205, 92, 92) : remaining < 10 ? Color.FromRgb(241, 183, 47) : Color.FromRgb(24, 182, 115));
@@ -342,9 +345,9 @@ public sealed class MainWindow : Window
 
     private void SetQuotaTextPlaceholders()
     {
-        primaryLabel.Text = isEnglish ? "5h window" : "5小时窗口";
-        secondaryLabel.Text = isEnglish ? "7d window" : "7天窗口";
-        planLabel.Text = isEnglish ? "Plan" : "计划";
+        primaryLabel.Text = isEnglish ? "Quota pool 1" : "额度池 1";
+        secondaryLabel.Text = isEnglish ? "Quota pool 2" : "额度池 2";
+        planLabel.Text = isEnglish ? "Plan / resets" : "计划 / 重置额度";
         primaryText.Text = "--";
         secondaryText.Text = "--";
         planText.Text = "--";

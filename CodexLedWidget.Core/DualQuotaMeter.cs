@@ -10,17 +10,20 @@ public sealed record DualQuotaMeter(DualQuotaMeterSegment Left, DualQuotaMeterSe
     public static DualQuotaMeter FromSnapshot(QuotaSnapshot snapshot, string cultureName)
     {
         return new DualQuotaMeter(
-            CreateSegment(snapshot.Primary, "5h"),
-            CreateSegment(snapshot.Secondary, "1w"));
+            CreateSegment(snapshot.Primary),
+            CreateSegment(snapshot.Secondary));
     }
 
-    private static DualQuotaMeterSegment CreateSegment(QuotaWindow? window, string label)
+    private static DualQuotaMeterSegment CreateSegment(QuotaWindow? window)
     {
         if (window is null)
         {
-            return new DualQuotaMeterSegment(label, 0, false);
+            return new DualQuotaMeterSegment("--", 0, false);
         }
 
-        return new DualQuotaMeterSegment(label, Math.Clamp(window.RemainingPercent, 0, 100), true);
+        return new DualQuotaMeterSegment(
+            QuotaTextFormatter.FormatWindowShortLabel(window),
+            Math.Clamp(window.RemainingPercent, 0, 100),
+            true);
     }
 }

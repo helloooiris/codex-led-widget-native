@@ -16,8 +16,8 @@ internal sealed class QuotaOrbControl : Control
     private static readonly IBrush MutedBrush = new SolidColorBrush(Color.FromRgb(82, 98, 115));
 
     private DualQuotaMeter meter = new(
-        new DualQuotaMeterSegment("5h", 0, false),
-        new DualQuotaMeterSegment("1w", 0, false));
+        new DualQuotaMeterSegment("--", 0, false),
+        new DualQuotaMeterSegment("--", 0, false));
 
     public void Render(DualQuotaMeter nextMeter)
     {

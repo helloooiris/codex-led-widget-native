@@ -6,7 +6,7 @@ on:
       tag:
         description: Existing release tag
         required: true
-        default: v0.2.0
+        default: v0.3.0
 
 permissions:
   contents: write
@@ -47,13 +47,13 @@ jobs:
         run: |
           notes_file="$(mktemp)"
           cat > "$notes_file" <<'EOF'
-          ## macOS v0.2.0
+          ## macOS v0.3.0
 
-          - 每 10 秒自动同步 Codex 额度，无需手动点击刷新
-          - 到达额度重置时间后立即显示 100%
-          - 优化液态玻璃面板与悬浮球的展开、收起动画
-          - 悬浮球按下即时反馈，面板展开不再有明显延迟
-          - 使用单进程架构，修复托盘菜单与窗口切换崩溃
+          - 适配新版 Codex 动态额度池，不再依赖固定 5 小时窗口
+          - 兼容 Plus、Pro 以及旧版 5 小时/7 天双窗口返回
+          - 支持独立模型额度池，并按实际窗口或模型名称显示
+          - 服务端提供时显示可用额度重置次数
+          - 保留每 10 秒自动同步、到点刷新和丝滑窗口动画
           - 自包含 .app，无需另外安装 .NET Runtime
 
           ### 安装

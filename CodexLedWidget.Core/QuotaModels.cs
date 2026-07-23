@@ -4,7 +4,9 @@ public sealed record QuotaWindow(
     int UsedPercent,
     int RemainingPercent,
     TimeSpan? WindowDuration,
-    DateTimeOffset? ResetsAt);
+    DateTimeOffset? ResetsAt,
+    string? LimitId = null,
+    string? LimitName = null);
 
 public sealed record QuotaSnapshot(
     string LimitId,
@@ -12,7 +14,8 @@ public sealed record QuotaSnapshot(
     string PlanType,
     QuotaWindow? Primary,
     QuotaWindow? Secondary,
-    DateTimeOffset FetchedAt)
+    DateTimeOffset FetchedAt,
+    int? ResetCreditsAvailable = null)
 {
     public int? RemainingPercent => Primary?.RemainingPercent ?? Secondary?.RemainingPercent;
     public DateTimeOffset? ResetsAt => Primary?.ResetsAt ?? Secondary?.ResetsAt;

@@ -40,6 +40,87 @@ public sealed class QuotaSnapshotTests
     }
 
     [TestMethod]
+    public void ParseRateLimitsResponseUsesMultipleBucketsAndResetCredits()
+    {
+        const string json = """
+        {
+          "rateLimits": {
+            "limitId": "codex",
+            "primary": { "usedPercent": 1, "windowDurationMins": 10080, "resetsAt": 1784504087 },
+            "secondary": null,
+            "planType": "pro"
+          },
+          "rateLimitsByLimitId": {
+            "codex_bengalfox": {
+              "limitId": "codex_bengalfox",
+              "limitName": "GPT-5.3-Codex-Spark",
+              "primary": { "usedPercent": 0, "windowDurationMins": 10080, "resetsAt": 1784511024 },
+              "secondary": null,
+              "planType": "pro"
+            },
+            "codex": {
+              "limitId": "codex",
+              "limitName": null,
+              "primary": { "usedPercent": 1, "windowDurationMins": 10080, "resetsAt": 1784504087 },
+              "secondary": null,
+              "planType": "pro"
+            }
+          },
+          "rateLimitResetCredits": { "availableCount": 3 }
+        }
+        """;
+
+        QuotaSnapshot snapshot = QuotaSnapshotParser.ParseRateLimitsResponse(json);
+        DualQuotaMeter meter = DualQuotaMeter.FromSnapshot(snapshot, "zh-CN");
+
+        Assert.AreEqual("codex", snapshot.Primary?.LimitId);
+        Assert.AreEqual(99, snapshot.Primary?.RemainingPercent);
+        Assert.AreEqual("codex_bengalfox", snapshot.Secondary?.LimitId);
+        Assert.AreEqual("GPT-5.3-Codex-Spark", snapshot.Secondary?.LimitName);
+        Assert.AreEqual(3, snapshot.ResetCreditsAvailable);
+        Assert.AreEqual("1w", meter.Left.ShortLabel);
+        Assert.AreEqual("Spark", meter.Right.ShortLabel);
+        Assert.AreEqual("Codex · 7天窗口", QuotaTextFormatter.FormatWindowLabel(snapshot.Primary, "zh-CN"));
+        Assert.AreEqual("Pro · 3 次可用重置", QuotaTextFormatter.FormatPlanSummary(snapshot.PlanType, snapshot.ResetCreditsAvailable, "zh-CN"));
+    }
+
+    [TestMethod]
+    public void ParseRateLimitsResponseSupportsPlusWithSingleWeeklyPool()
+    {
+        const string json = """
+        {
+          "rateLimitsByLimitId": {
+            "codex": {
+              "limitId": "codex",
+              "limitName": null,
+              "planType": "plus",
+              "primary": {
+                "usedPercent": 24,
+                "windowDurationMins": 10080,
+                "resetsAt": 1784504087
+              },
+              "secondary": null
+            }
+          },
+          "rateLimitResetCredits": null
+        }
+        """;
+
+        QuotaSnapshot snapshot = QuotaSnapshotParser.ParseRateLimitsResponse(json);
+        DualQuotaMeter meter = DualQuotaMeter.FromSnapshot(snapshot, "zh-CN");
+
+        Assert.AreEqual("plus", snapshot.PlanType);
+        Assert.AreEqual("Codex", snapshot.Primary?.LimitName);
+        Assert.AreEqual(76, snapshot.Primary?.RemainingPercent);
+        Assert.IsNull(snapshot.Secondary);
+        Assert.IsNull(snapshot.ResetCreditsAvailable);
+        Assert.AreEqual("1w", meter.Left.ShortLabel);
+        Assert.AreEqual("--", meter.Right.ShortLabel);
+        Assert.IsFalse(meter.Right.HasData);
+        Assert.AreEqual("Plus", QuotaTextFormatter.FormatPlanSummary(snapshot.PlanType, snapshot.ResetCreditsAvailable, "zh-CN"));
+    }
+
+    [TestMethod]
     public void FormatterShowsRemainingAndChineseResetTimeWithoutUsedPercent()
     {
         QuotaWindow window = new(
